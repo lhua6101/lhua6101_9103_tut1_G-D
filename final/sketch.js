@@ -3,6 +3,8 @@ let birdSound, waterSound, rainSound;
 let isRaining = false; // Track if rainSound is playing
 
 let amplitude; // For measuring volume levels
+let fft; // For frequency analysis of waterSound
+let waterButton; // Play/pause button for waterSound
 
 // preload() function to load sounds
 function preload() {
@@ -14,10 +16,19 @@ function preload() {
 // setup() function
 function setup() {
   createCanvas(800, 600);
-  loop(); 
+  loop();
 
   amplitude = new p5.Amplitude(); // Initialize amplitude analyzer
-  amplitude.setInput(rainSound); // Attach to rain sound
+  amplitude.setInput(waterSound); // Attach to water sound
+
+  // Initialize FFT for water sound analysis
+  fft = new p5.FFT(0.8, 64);
+  fft.setInput(waterSound);
+
+  // Create play/pause button for water sound
+  waterButton = createButton('PLAY WATER SOUND');
+  waterButton.position(10, 10); // Position at the top left
+  waterButton.mousePressed(toggleWaterSound);
 
   // Create the sky and water
   for (let y = 0; y < height / 2; y += 10) {
@@ -90,6 +101,17 @@ function drawRaindrops() {
   }
 }
 
+// Toggle water sound play/pause
+function toggleWaterSound() {
+  if (!waterSound.isPlaying()) {
+    waterSound.loop();
+    waterButton.html("PAUSE");
+  } else {
+    waterSound.stop();
+    waterButton.html("PLAY");
+  }
+}
+
 // draw() function
 function draw() {
   if (isRaining) {
@@ -98,9 +120,15 @@ function draw() {
     background(255); // Initial background color
   }
 
-  // Draw all shapes
+  let amplitudeLevel = amplitude.getLevel(); // Get the amplitude level of waterSound
+  
+  // Draw and animate all shapes
   for (let shape of shapes) {
+    if (shape instanceof BauhausRect) {
+      shape.animateHeight(amplitudeLevel); // Animate height based on amplitude
+    }
     shape.draw();
+    
     if (shape instanceof BauhausCloud) {
       shape.move(); // Move the clouds
     }
@@ -109,6 +137,25 @@ function draw() {
   // If it’s raining, draw the raindrops
   if (isRaining) {
     drawRaindrops();
+  }
+
+  // Draw the water sound visualization
+  drawAudioVisualization();
+}
+
+// Inside drawAudioVisualization function
+function drawAudioVisualization() {
+  let spectrum = fft.analyze(); // Get frequency spectrum
+
+  noFill();
+  for (let i = 0; i < spectrum.length; i++) {
+    let y = map(spectrum[i], 0, 255, height, 0); // Map frequency to height
+    
+    // Use colors that blend into the sky background, with low opacity
+    let blendedColor = color(255, 190, 120, 50); // Light orange with low opacity
+    fill(blendedColor);
+    stroke(0, 100, 150, 70); // Soft blue outline for subtle contrast
+    rect(i * 10, y, 10, height - y); // Draw a bar for each frequency
   }
 }
 
@@ -121,12 +168,19 @@ class BauhausShape {
   }
 }
 
-// BauhausRect class
+// Inside BauhausRect class's animateHeight method
 class BauhausRect extends BauhausShape {
   constructor(x, y, width, height, color) {
     super(x, y, color);
     this.width = width;
-    this.height = height;
+    this.baseHeight = height; // Store the base height
+    this.height = height; // Current height, which will oscillate
+  }
+
+  animateHeight(amplitudeLevel) {
+    // Increase the height variation range for a more pronounced effect
+    let heightVariation = map(amplitudeLevel, 0, 1, -this.baseHeight * 0.4, this.baseHeight * 0.6);
+    this.height = this.baseHeight + heightVariation;
   }
 
   draw() {
